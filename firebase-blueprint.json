@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "flatNumber": { "type": "string" },
+        "communityId": { "type": "string" },
+        "role": { "type": "string", "enum": ["president", "treasurer", "member"] },
+        "isVerified": { "type": "boolean" },
+        "phoneNumber": { "type": "string" },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "flatNumber", "communityId", "role"]
+    },
+    "Community": {
+      "title": "Community",
+      "description": "A gated community (apartment/colony)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "presidentUid": { "type": "string" },
+        "treasurerUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "presidentUid", "treasurerUid", "status"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "An item listed for sharing or rent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "pricePerDay": { "type": "number" },
+        "category": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "communityId": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "rented", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "ownerUid", "communityId", "status"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A booking request for an item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemTitle": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "borrowerUid": { "type": "string" },
+        "borrowerName": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"] },
+        "depositPaid": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["itemId", "ownerUid", "borrowerUid", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A chat message",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "senderUid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/items/{itemId}": {
+      "schema": "Item",
+      "description": "Items listed for borrowing/rent"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Booking records"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Chat messages"
+    },
+    "/communities/{communityId}": {
+      "schema": "Community",
+      "description": "Communities and their approval status"
+    }
+  }
+}

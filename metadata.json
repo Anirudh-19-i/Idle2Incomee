@@ -1,0 +1,8 @@
+{
+  "name": "SamaajShare",
+  "description": "A hyperlocal community sharing platform for gated communities to borrow, lend, and monetize idle household items.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

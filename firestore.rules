@@ -1,0 +1,247 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - uid: string (required)
+//   - displayName: string (required)
+//   - flatNumber: string (required)
+//   - communityId: string (required)
+//   - email: string (optional)
+//   - photoURL: string (optional)
+//   - phoneNumber: string (optional)
+//   - rating: number (optional)
+//   - createdAt: timestamp (required)
+//
+// Collection: items
+// Document ID: {itemId}
+// Fields:
+//   - id: string (required)
+//   - title: string (required)
+//   - description: string (required)
+//   - imageUrl: string (required)
+//   - pricePerDay: number (required)
+//   - category: string (required)
+//   - ownerUid: string (required)
+//   - ownerName: string (required)
+//   - communityId: string (required)
+//   - status: string (available, rented, inactive)
+//   - createdAt: timestamp (required)
+//
+// Collection: bookings
+// Document ID: {bookingId}
+// Fields:
+//   - itemId: string (required)
+//   - itemTitle: string (required)
+//   - ownerUid: string (required)
+//   - borrowerUid: string (required)
+//   - borrowerName: string (required)
+//   - startDate: timestamp (required)
+//   - endDate: timestamp (required)
+//   - totalPrice: number (required)
+//   - status: string (pending, confirmed, completed, cancelled)
+//   - depositPaid: boolean (required)
+//   - createdAt: timestamp (required)
+//
+// Collection: communities
+// Document ID: {communityId}
+// Fields:
+//   - id: string (required)
+//   - name: string (required)
+//   - location: string (required)
+//   - presidentUid: string (required)
+//   - treasurerUid: string (optional)
+//   - status: string (pending, active, rejected)
+//   - createdAt: timestamp (required)
+//
+// Collection: chats
+// Document ID: {chatId}
+// Fields:
+//   - participants: list (required, strings of uids)
+//   - lastUpdate: timestamp (optional)
+//
+// Collection: chats/{chatId}/messages
+//...
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "anirudhreddymogulla@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isPresident(communityId) {
+      return isSuperAdmin() || (
+             isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'president' &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.communityId == communityId);
+    }
+
+    function isTreasurer(communityId) {
+      return isSuperAdmin() || (
+             isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'treasurer' &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.communityId == communityId);
+    }
+
+    function isMember(communityId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.communityId == communityId;
+    }
+
+    function isVerifiedMember(communityId) {
+      return isMember(communityId) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isVerified == true;
+    }
+
+    function isCommunityActive(communityId) {
+      return communityId != null && 
+             exists(/databases/$(database)/documents/communities/$(communityId)) &&
+             get(/databases/$(database)/documents/communities/$(communityId)).data.status == 'active';
+    }
+
+    function isValidString(field, min, max) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= min &&
+             request.resource.data[field].size() <= max;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function isRecent(field) {
+      return request.resource.data[field] is timestamp &&
+             request.resource.data[field] > request.time - duration.value(5, 'm') &&
+             request.resource.data[field] <= request.time;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() > 0 &&
+             data.flatNumber is string && data.flatNumber.size() > 0 &&
+             data.communityId is string &&
+             data.role in ['president', 'treasurer', 'member'];
+    }
+
+    function isValidItem(data) {
+      return data.ownerUid == request.auth.uid &&
+             data.title is string && data.title.size() > 0 &&
+             data.description is string && data.description.size() > 0 &&
+             data.pricePerDay is number &&
+             data.category is string &&
+             data.status in ['available', 'rented', 'inactive'] &&
+             data.communityId is string &&
+             data.ownerName is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidBooking(data) {
+      return (data.borrowerUid == request.auth.uid || data.ownerUid == request.auth.uid) &&
+             data.status in ['pending', 'confirmed', 'completed', 'cancelled'] &&
+             data.itemId is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /communities/{communityId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      isValidString('name', 3, 100) && 
+                      isValidString('location', 3, 200);
+      allow update: if isSuperAdmin() || 
+                      ((isPresident(communityId) || isTreasurer(communityId)) && 
+                       areImmutableFieldsUnchanged(['id', 'presidentUid', 'status']));
+      allow delete: if isSuperAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && (
+          // Allow initial setup (when fields are missing/default) or non-sensitive updates
+          (!('role' in resource.data) || areImmutableFieldsUnchanged(['uid'])) ||
+          areImmutableFieldsUnchanged(['role', 'isVerified', 'uid'])
+        )) ||
+        (isPresident(resource.data.communityId) && areImmutableFieldsUnchanged(['uid', 'communityId'])) ||
+        isSuperAdmin()
+      );
+    }
+
+    match /items/{itemId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.ownerUid == request.auth.uid || 
+        isMember(resource.data.communityId)
+      );
+      allow create: if isAuthenticated() && (isSuperAdmin() || (
+                       isValidItem(request.resource.data) && 
+                       (isPresident(request.resource.data.communityId) || 
+                        isTreasurer(request.resource.data.communityId) ||
+                        (isVerifiedMember(request.resource.data.communityId) && isCommunityActive(request.resource.data.communityId)))
+                    ));
+      allow update: if isAuthenticated() && (
+        isSuperAdmin() ||
+        (isOwner(resource.data.ownerUid) && isValidItem(request.resource.data) && areImmutableFieldsUnchanged(['ownerUid', 'communityId'])) ||
+        (isPresident(resource.data.communityId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+      );
+      allow delete: if isAuthenticated() && (isOwner(resource.data.ownerUid) || isPresident(resource.data.communityId) || isSuperAdmin());
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAuthenticated() && (
+        isSuperAdmin() ||
+        resource.data.borrowerUid == request.auth.uid || 
+        resource.data.ownerUid == request.auth.uid ||
+        isPresident(resource.data.communityId) ||
+        isTreasurer(resource.data.communityId)
+      );
+      allow create: if isAuthenticated() && isValidBooking(request.resource.data) && 
+                      isVerifiedMember(request.resource.data.communityId) &&
+                      isCommunityActive(request.resource.data.communityId);
+      allow update: if isAuthenticated() && (
+        (isOwner(resource.data.borrowerUid) || isOwner(resource.data.ownerUid)) ||
+        isSuperAdmin()
+      );
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow write: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && request.resource.data.senderUid == request.auth.uid;
+      }
+    }
+  }
+}
